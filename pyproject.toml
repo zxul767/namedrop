@@ -1,0 +1,44 @@
+[project]
+name = "pdf-rename"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Willebaldo Gomez",email = "willebaldo.gomez@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pypdf2 (>=3.0.1,<4.0.0)",
+    "google-generativeai (>=0.8.5,<0.9.0)",
+    "pymupdf (>=1.26.3,<2.0.0)",
+    "ollama (>=0.5.1,<0.6.0)",
+    "tqdm (>=4.67.1,<5.0.0)"
+]
+
+[tool.ruff]
+line-length = 88
+lint.select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "preserve"
+indent-style = "space"
+preview = true
+
+[tool.mypy]
+exclude = ["build/", "venv/", ".venv/", "__pycache__"]
+strict = true
+incremental = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = "fitz.*"
+ignore_missing_imports = true
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.12.7"
+mypy = "^1.17.1"
+
