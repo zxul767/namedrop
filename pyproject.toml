@@ -1,7 +1,7 @@
 [project]
-name = "pdf-rename"
+name = "namedrop"
 version = "0.1.0"
-description = ""
+description = "Renaming files based on their contents"
 authors = [
     {name = "Willebaldo Gomez",email = "willebaldo.gomez@gmail.com"}
 ]
