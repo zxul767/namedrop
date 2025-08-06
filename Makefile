@@ -22,6 +22,6 @@ lint:
 
 typecheck:
 	@echo "$(YELLOW)==> Running type checker (mypy)$(RESET)"
-	@mypy src
+	@poetry run mypy src
 
 # end
