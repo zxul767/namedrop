@@ -107,10 +107,10 @@ def extract_document_title(path: Path) -> Optional[str]:
         raw = collapse_same_whitespace(raw)
         raw = remove_superfluous_lines(raw)
         title = generate_title(raw)
-        return title if title else None
 
+        return title if title else None
     except Exception as e:
-        print(f"[PDF title extraction error] {e}")
+        print(f"[pdf title extraction error] {type(e)} - {str(e)}")
         return None
     finally:
         doc.close()
@@ -118,14 +118,16 @@ def extract_document_title(path: Path) -> Optional[str]:
 
 def generate_title(text: str, model: str = "llama3.2:1b") -> Optional[str]:
     prompt = """
-    What is the title of this document? If you cannot find it in the
-    following extract, then what do you think a good title would be?
+    What title best describes this document in a concise manner? If the
+    original title is too long (more than 5 words), come up with a title
+    that captures the gist in fewer words.
 
     Avoid filler words and verbose phrasing. Avoid generic terms and
-    be specific. Avoid phrases like "book review" which don't really
-    give any specifics.
+    be specific. Avoid titles which don't really give any specifics.
+    Be sure to reply in the same language as the text given.
 
-    Reply only with the phrase on a single line and nothing more.
+    Please reply only with the title on a single line and absolutely nothing
+    more. DO NOT add any explanation or superflous text.
     """
     content = f"Document contents: \n\n {text.strip()}"
     try:
@@ -144,7 +146,7 @@ def generate_title(text: str, model: str = "llama3.2:1b") -> Optional[str]:
                 },
             )
         )
-        assert response.message.content == ""
+        assert response.message.content is not None
         title = slugify(response.message.content or "")
         title = ensure_title_restrictions(title)
         print(f"LLM output (generated in {duration:.2f}s): {title}")
