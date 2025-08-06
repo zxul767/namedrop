@@ -1,25 +1,23 @@
 #!/bin/env python
+import argparse
 import re
 import time
 import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Match, Optional, Tuple, TypeVar
 
-import fitz  # PyMuPDF
+import pymupdf
 import ollama
 
 R = TypeVar("R")
 
-
 def main() -> None:
-    import argparse
-
     parser = argparse.ArgumentParser(description="Create renamed symlinks for PDFs.")
-    parser.add_argument("directory", type=Path, help="Input directory with PDFs")
+    parser.add_argument("directory", type=is_dirpath, help="Input directory with PDFs")
     parser.add_argument(
         "-o",
         "--output-dir",
-        type=Path,
+        type=is_dirpath,
         required=True,
         help="Directory where symlinks with new names will be created",
     )
@@ -47,7 +45,6 @@ def main() -> None:
         recursive=args.recursive,
         force=args.force,
     )
-
 
 def rename_pdfs(
     input_dir: Path,
@@ -98,7 +95,6 @@ def rename_pdfs(
 
 def extract_document_title(path: Path) -> Optional[str]:
     try:
-        doc = fitz.open(str(path))
         raw = extract_text_preview(path)
         if not raw:
             print(f"{path} has no preview (probably a PDF without readable text)")
@@ -110,11 +106,8 @@ def extract_document_title(path: Path) -> Optional[str]:
 
         return title if title else None
     except Exception as e:
-        print(f"[pdf title extraction error] {type(e)} - {str(e)}")
+        _print_exception(e, "[document title extraction error]")
         return None
-    finally:
-        doc.close()
-
 
 def generate_title(text: str, model: str = "llama3.2:1b") -> Optional[str]:
     prompt = """
@@ -163,25 +156,23 @@ def ensure_title_restrictions(title: str, word_limit: int = 10) -> str:
     return "-".join(words)
 
 
-def extract_text_preview(path: Path, min_chars: int = 1000, max_pages: int = 10) -> str:
+def extract_text_preview(path: Path, min_chars: int = 1000, max_pages: int = 10) -> Optional[str]:
     try:
-        doc = fitz.open(str(path))
-        text_chunks = []
-        total_chars = 0
-
-        for page in doc[:max_pages]:
-            text = page.get_text("text")
-            cleaned = text.strip()
-            if cleaned:
-                text_chunks.append(cleaned)
-                total_chars += len(cleaned)
-                if total_chars >= min_chars:
-                    break
-
+        with pymupdf.open(str(path)) as doc:
+            text_chunks = []
+            total_chars = 0
+            for page in doc[:max_pages]:
+                text = page.get_text("text")
+                cleaned = text.strip()
+                if cleaned:
+                    text_chunks.append(cleaned)
+                    total_chars += len(cleaned)
+                    if total_chars >= min_chars:
+                        break
         return "\n\n".join(text_chunks)
     except Exception as e:
-        print(f"[PDF text extraction error] {e}")
-        return ""
+        _print_exception(e, "[pdf text extraction error]")
+        return None
 
 
 def remove_superfluous_lines(text: str) -> str:
@@ -219,12 +210,20 @@ def slugify(text: str) -> str:
     return text.lower().replace(" ", "-")
 
 
+def is_dirpath(path_str: str) -> Path:
+    path = Path(path_str)
+    if not path.is_dir():
+        raise argparse.ArgumentTypeError(f"'{path}' is not a valid directory")
+    return path
+
 def measure_time(func: Callable[..., R], *args: Any, **kwargs: Any) -> Tuple[R, float]:
     start = time.perf_counter()
     result = func(*args, **kwargs)
     end = time.perf_counter()
     return result, end - start
 
+def _print_exception(e: Exception, message: str):
+    print(f"[{message}] {type(e)} - {str(e)}")
 
 if __name__ == "__main__":
     main()
