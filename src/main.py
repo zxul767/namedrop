@@ -6,10 +6,11 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Match, Optional, Tuple, TypeVar
 
-import pymupdf
 import ollama
+import pymupdf
 
 R = TypeVar("R")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create renamed symlinks for PDFs.")
@@ -46,6 +47,7 @@ def main() -> None:
         force=args.force,
     )
 
+
 def rename_pdfs(
     input_dir: Path,
     output_dir: Path,
@@ -64,7 +66,7 @@ def rename_pdfs(
     for path in files:
         print(f"processing: {path}")
 
-        title = extract_document_title(path)
+        title = create_document_title(path)
         if not title and "?" in path.name:
             print(f"skipping {path}")
             continue
@@ -93,21 +95,21 @@ def rename_pdfs(
                 print(f"[error] Failed to create symlink for {path}: {e}")
 
 
-def extract_document_title(path: Path) -> Optional[str]:
+def create_document_title(filepath: Path) -> Optional[str]:
     try:
-        raw = extract_text_preview(path)
-        if not raw:
-            print(f"{path} has no preview (probably a PDF without readable text)")
+        preview = extract_text_preview(filepath)
+        if not preview:
+            print(f"{filepath} has no preview (probably a PDF without readable text)")
             return None
-
-        raw = collapse_same_whitespace(raw)
-        raw = remove_superfluous_lines(raw)
-        title = generate_title(raw)
-
+        preview = collapse_same_whitespace(preview)
+        preview = remove_superfluous_lines(preview)
+        title = generate_title(preview)
         return title if title else None
+
     except Exception as e:
         _print_exception(e, "[document title extraction error]")
         return None
+
 
 def generate_title(text: str, model: str = "llama3.2:1b") -> Optional[str]:
     prompt = """
@@ -139,24 +141,20 @@ def generate_title(text: str, model: str = "llama3.2:1b") -> Optional[str]:
                 },
             )
         )
-        assert response.message.content is not None
-        title = slugify(response.message.content or "")
-        title = ensure_title_restrictions(title)
-        print(f"LLM output (generated in {duration:.2f}s): {title}")
-        return title
-
     except ollama.ResponseError as e:
         print(f"[Ollama error] {e}")
         return None
 
+    assert response.message.content is not None
+    title = slugify(response.message.content or "")
+    title = ensure_title_restrictions(title)
+    print(f"LLM output (generated in {duration:.2f}s): {title}")
+    return title
 
-def ensure_title_restrictions(title: str, word_limit: int = 10) -> str:
-    words = title.split("-")
-    words = words[:word_limit]
-    return "-".join(words)
 
-
-def extract_text_preview(path: Path, min_chars: int = 1000, max_pages: int = 10) -> Optional[str]:
+def extract_text_preview(
+    path: Path, min_chars: int = 1000, max_pages: int = 10
+) -> Optional[str]:
     try:
         with pymupdf.open(str(path)) as doc:
             text_chunks = []
@@ -176,16 +174,22 @@ def extract_text_preview(path: Path, min_chars: int = 1000, max_pages: int = 10)
 
 
 def remove_superfluous_lines(text: str) -> str:
-    lines = []
-    for line in text.split("\n"):
-        line = line.strip()
-        if is_just_punctuation(line) or line.isdigit():
-            continue
-        lines.append(line)
-    return "\n".join(lines)
+    """Removes lines that contain only punctuation or numbers."""
+    lines = text.splitlines()
+    cleaned_lines = [
+        line for line in lines if not re.fullmatch(r"[\d\W_]+", line.strip())
+    ]
+    return "\n".join(cleaned_lines)
 
 
 def collapse_same_whitespace(text: str) -> str:
+    """
+    Replace contiguous occurrence of whitespace with a single instance of them.
+
+    For heterogenous runs, newlines take precedence, followed by tabs and then
+    spaces.
+    """
+
     def _replace(match: Match[str]) -> str:
         whitespace = match.group(0)
         if "\n" in whitespace:
@@ -198,8 +202,10 @@ def collapse_same_whitespace(text: str) -> str:
     return text
 
 
-def is_just_punctuation(s: str) -> bool:
-    return bool(s) and all(unicodedata.category(c).startswith("P") for c in s)
+def ensure_title_restrictions(title: str, word_limit: int = 10) -> str:
+    words = title.split("-")
+    words = words[:word_limit]
+    return "-".join(words)
 
 
 def slugify(text: str) -> str:
@@ -216,14 +222,17 @@ def is_dirpath(path_str: str) -> Path:
         raise argparse.ArgumentTypeError(f"'{path}' is not a valid directory")
     return path
 
+
 def measure_time(func: Callable[..., R], *args: Any, **kwargs: Any) -> Tuple[R, float]:
     start = time.perf_counter()
     result = func(*args, **kwargs)
     end = time.perf_counter()
     return result, end - start
 
-def _print_exception(e: Exception, message: str):
+
+def _print_exception(e: Exception, message: str) -> None:
     print(f"[{message}] {type(e)} - {str(e)}")
+
 
 if __name__ == "__main__":
     main()
